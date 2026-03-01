@@ -1,0 +1,96 @@
+name: Deploy to Scalar (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      spec-file:
+        description: 'OpenAPI spec file to deploy'
+        type: string
+        required: true
+      
+      scalar-project-id:
+        description: 'Scalar project ID'
+        type: string
+        required: false
+        default: ''
+      
+      skip-if-no-changes:
+        description: 'Skip deploy if spec unchanged'
+        type: boolean
+        required: false
+        default: true
+    
+    secrets:
+      SCALAR_API_KEY:
+        required: true
+    
+    outputs:
+      deployed:
+        description: 'Whether deployment occurred'
+        value: ${{ jobs.deploy.outputs.deployed }}
+      
+      spec-hash:
+        description: 'Hash of deployed spec'
+        value: ${{ jobs.deploy.outputs.spec-hash }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    outputs:
+      deployed: ${{ steps.deploy.outputs.deployed }}
+      spec-hash: ${{ steps.hash.outputs.hash }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Calculate spec hash
+        id: hash
+        run: |
+          HASH=$(sha256sum "${{ inputs.spec-file }}" | awk '{print $1}')
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "📊 Spec hash: $HASH"
+      
+      - name: Check if already deployed
+        if: inputs.skip-if-no-changes == true
+        id: check
+        run: |
+          # TODO: Implementar check de hash previo si Scalar lo soporta
+          echo "skip=false" >> $GITHUB_OUTPUT
+      
+      - name: Deploy to Scalar
+        if: steps.check.outputs.skip != 'true'
+        id: deploy
+        run: |
+          echo "🚀 Deploying to Scalar..."
+          
+          SCALAR_CMD="bunx @scalar/cli deploy ${{ inputs.spec-file }}"
+          
+          if [ -n "${{ inputs.scalar-project-id }}" ]; then
+            SCALAR_CMD="$SCALAR_CMD --project-id ${{ inputs.scalar-project-id }}"
+          fi
+          
+          $SCALAR_CMD
+          
+          echo "deployed=true" >> $GITHUB_OUTPUT
+          echo "✅ Deployed successfully"
+        env:
+          SCALAR_API_KEY: ${{ secrets.SCALAR_API_KEY }}
+      
+      - name: Summary
+        run: |
+          echo "### Scalar Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.deploy.outputs.deployed }}" = "true" ]; then
+            echo "✅ Deployed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "📊 Spec hash: \`${{ steps.hash.outputs.hash }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️  Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          fi
