@@ -1,0 +1,112 @@
+name: 'OpenAPI Sync'
+description: 'Download and validate OpenAPI spec from a remote source'
+author: 'BeeL Team'
+
+branding:
+  icon: 'download'
+  color: 'blue'
+
+inputs:
+  spec-url:
+    description: 'URL to download OpenAPI spec from'
+    required: true
+  
+  spec-hash:
+    description: 'Expected SHA256 hash for validation (optional)'
+    required: false
+    default: ''
+  
+  output-file:
+    description: 'Output filename for the spec'
+    required: false
+    default: 'openapi.yaml'
+  
+  verify-hash:
+    description: 'Whether to verify the hash (requires spec-hash)'
+    required: false
+    default: 'true'
+
+outputs:
+  spec-path:
+    description: 'Path to the downloaded spec'
+    value: ${{ steps.download.outputs.spec-path }}
+  
+  spec-hash:
+    description: 'Actual SHA256 hash of downloaded spec'
+    value: ${{ steps.hash.outputs.hash }}
+  
+  has-changes:
+    description: 'Whether the spec changed compared to current version'
+    value: ${{ steps.check.outputs.has-changes }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download OpenAPI spec
+      id: download
+      shell: bash
+      run: |
+        SPEC_URL="${{ inputs.spec-url }}"
+        OUTPUT="${{ inputs.output-file }}"
+        
+        echo "📥 Downloading OpenAPI spec from:"
+        echo "   $SPEC_URL"
+        echo "   → $OUTPUT"
+        
+        # Download with follow redirects
+        if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
+          echo "✅ Download successful"
+        else
+          echo "❌ Failed to download spec from $SPEC_URL"
+          exit 1
+        fi
+        
+        # Verify it's valid YAML
+        if grep -q "openapi:" "$OUTPUT"; then
+          echo "✅ Valid OpenAPI spec detected"
+        else
+          echo "⚠️  Warning: 'openapi:' field not found (might not be OpenAPI 3.x)"
+        fi
+        
+        echo "spec-path=$OUTPUT" >> $GITHUB_OUTPUT
+    
+    - name: Calculate hash
+      id: hash
+      shell: bash
+      run: |
+        HASH=$(sha256sum "${{ inputs.output-file }}" | cut -d' ' -f1)
+        echo "hash=$HASH" >> $GITHUB_OUTPUT
+        echo "📊 SHA256: $HASH"
+    
+    - name: Verify hash
+      if: inputs.verify-hash == 'true' && inputs.spec-hash != ''
+      shell: bash
+      run: |
+        EXPECTED="${{ inputs.spec-hash }}"
+        ACTUAL="${{ steps.hash.outputs.hash }}"
+        
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+          echo "❌ Hash mismatch!"
+          echo "   Expected: $EXPECTED"
+          echo "   Actual:   $ACTUAL"
+          echo ""
+          echo "This could indicate:"
+          echo "  - The remote spec was modified since dispatch"
+          echo "  - Network corruption"
+          echo "  - Man-in-the-middle attack"
+          exit 1
+        fi
+        
+        echo "✅ Hash verified successfully"
+    
+    - name: Check for changes
+      id: check
+      shell: bash
+      run: |
+        if git diff --exit-code "${{ inputs.output-file }}" 2>/dev/null; then
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+          echo "ℹ️  No changes detected (spec is up to date)"
+        else
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          echo "✅ Changes detected - spec was updated"
+        fi

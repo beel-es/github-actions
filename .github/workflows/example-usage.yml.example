@@ -1,0 +1,33 @@
+# Example: Complete OpenAPI workflow
+# Copy this to your consuming repo and customize
+
+name: OpenAPI Workflow Example
+
+on:
+  repository_dispatch:
+    types: [openapi-updated]
+  workflow_dispatch:
+
+jobs:
+  # Step 1: Sync the latest OpenAPI spec
+  sync:
+    uses: beel-es/github-actions/.github/workflows/sync-from-openapi.yml@main
+    with:
+      spec-url: ${{ github.event.client_payload.spec_url || 'https://example.com/openapi.yaml' }}
+      spec-hash: ${{ github.event.client_payload.spec_hash }}
+      output-file: 'openapi.yaml'
+      commit-message: 'sync: update OpenAPI spec from backend'
+  
+  # Step 2: Regenerate SDK and publish (only if spec changed)
+  publish:
+    needs: sync
+    if: needs.sync.outputs.has-changes == 'true'
+    uses: beel-es/github-actions/.github/workflows/publish-npm-sdk.yml@main
+    with:
+      node-version: '20'
+      generate-script: 'generate'  # Your code generation script
+      build-script: 'build'
+      skip-tests: false
+      version-bump: 'patch'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

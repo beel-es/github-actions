@@ -1,0 +1,98 @@
+name: Bundle OpenAPI (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      input-file:
+        description: 'Main OpenAPI file to bundle'
+        type: string
+        required: true
+      
+      output-file:
+        description: 'Output bundled spec filename'
+        type: string
+        required: false
+        default: 'bundled.yaml'
+      
+      remove-unused-components:
+        description: 'Remove unused components from bundle'
+        type: boolean
+        required: false
+        default: false
+      
+      dereference:
+        description: 'Inline all $ref (not recommended for large specs)'
+        type: boolean
+        required: false
+        default: false
+      
+      commit-message:
+        description: 'Custom commit message'
+        type: string
+        required: false
+        default: 'chore: auto-bundle OpenAPI spec'
+      
+      skip-commit:
+        description: 'Skip committing changes (just bundle)'
+        type: boolean
+        required: false
+        default: false
+    
+    outputs:
+      has-changes:
+        description: 'Whether bundled spec changed'
+        value: ${{ jobs.bundle.outputs.has-changes }}
+      
+      bundle-hash:
+        description: 'SHA256 hash of bundle'
+        value: ${{ jobs.bundle.outputs.bundle-hash }}
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    outputs:
+      has-changes: ${{ steps.bundle.outputs.has-changes }}
+      bundle-hash: ${{ steps.bundle.outputs.bundle-hash }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Bundle OpenAPI spec
+        id: bundle
+        uses: beel-es/github-actions/openapi-bundle@main
+        with:
+          input-file: ${{ inputs.input-file }}
+          output-file: ${{ inputs.output-file }}
+          remove-unused-components: ${{ inputs.remove-unused-components }}
+          dereference: ${{ inputs.dereference }}
+      
+      - name: Commit and push
+        if: steps.bundle.outputs.has-changes == 'true' && inputs.skip-commit == false
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add "${{ inputs.output-file }}"
+          
+          COMMIT_MSG="${{ inputs.commit-message }}"
+          COMMIT_MSG="$COMMIT_MSG
+
+Hash: ${{ steps.bundle.outputs.bundle-hash }}"
+          
+          git commit -m "$COMMIT_MSG"
+          git push
+      
+      - name: Summary
+        run: |
+          if [ "${{ steps.bundle.outputs.has-changes }}" = "true" ]; then
+            echo "✅ OpenAPI bundle updated successfully"
+            echo "📊 Hash: ${{ steps.bundle.outputs.bundle-hash }}"
+          else
+            echo "ℹ️  OpenAPI bundle already up to date"
+          fi

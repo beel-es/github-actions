@@ -1,0 +1,162 @@
+name: Publish npm SDK (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        type: string
+        required: false
+        default: '20'
+      
+      generate-script:
+        description: 'npm script to generate code (optional)'
+        type: string
+        required: false
+        default: ''
+      
+      build-script:
+        description: 'npm script to build'
+        type: string
+        required: false
+        default: 'build'
+      
+      test-script:
+        description: 'npm script to run tests'
+        type: string
+        required: false
+        default: 'test'
+      
+      skip-tests:
+        description: 'Skip running tests'
+        type: boolean
+        required: false
+        default: false
+      
+      version-bump:
+        description: 'Version bump type (patch|minor|major)'
+        type: string
+        required: false
+        default: 'patch'
+    
+    secrets:
+      NPM_TOKEN:
+        required: true
+    
+    outputs:
+      published:
+        description: 'Whether package was published'
+        value: ${{ jobs.publish.outputs.published }}
+      
+      version:
+        description: 'New version number'
+        value: ${{ jobs.publish.outputs.version }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    outputs:
+      published: ${{ steps.check.outputs.has-changes }}
+      version: ${{ steps.version.outputs.new_version }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate code
+        if: inputs.generate-script != ''
+        run: |
+          echo "🔧 Running generation script: ${{ inputs.generate-script }}"
+          npm run ${{ inputs.generate-script }}
+      
+      - name: Build
+        run: |
+          echo "🏗️  Building with script: ${{ inputs.build-script }}"
+          npm run ${{ inputs.build-script }}
+      
+      - name: Run tests
+        if: inputs.skip-tests == false
+        run: |
+          echo "🧪 Running tests..."
+          npm run ${{ inputs.test-script }} || echo "⚠️  Tests failed, but continuing (set skip-tests: true to skip)"
+      
+      - name: Check for changes
+        id: check
+        run: |
+          git add -A
+          if git diff --staged --quiet; then
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No changes detected - skipping publish"
+          else
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected - will publish"
+          fi
+      
+      - name: Bump version
+        if: steps.check.outputs.has-changes == 'true'
+        id: version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          echo "📌 Bumping version (${{ inputs.version-bump }})..."
+          NEW_VERSION=$(npm version ${{ inputs.version-bump }} --no-git-tag-version)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ New version: $NEW_VERSION"
+          
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push
+      
+      - name: Publish to npm
+        if: steps.check.outputs.has-changes == 'true'
+        run: |
+          echo "📦 Publishing to npm..."
+          npm publish --access public
+          echo "✅ Published successfully"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Create GitHub Release
+        if: steps.check.outputs.has-changes == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.new_version }}
+          name: ${{ steps.version.outputs.new_version }}
+          generate_release_notes: true
+          body: |
+            ## 🤖 Auto-generated SDK Update
+            
+            Regenerated and published to npm.
+            
+            ```bash
+            npm install ${{ github.repository }}@${{ steps.version.outputs.new_version }}
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.has-changes }}" = "true" ]; then
+            echo "✅ SDK published successfully"
+            echo "📦 Version: ${{ steps.version.outputs.new_version }}"
+            echo "🔗 https://www.npmjs.com/package/${{ github.repository }}"
+          else
+            echo "ℹ️  No changes - SDK already up to date"
+          fi

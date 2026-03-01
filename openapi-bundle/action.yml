@@ -1,0 +1,114 @@
+name: 'OpenAPI Bundle'
+description: 'Bundle multiple OpenAPI YAML files into one using Redocly CLI'
+author: 'BeeL Team'
+
+branding:
+  icon: 'package'
+  color: 'purple'
+
+inputs:
+  input-file:
+    description: 'Main OpenAPI file (with $ref to other files)'
+    required: true
+  
+  output-file:
+    description: 'Output bundled spec filename'
+    required: false
+    default: 'bundled.yaml'
+  
+  remove-unused-components:
+    description: 'Remove unused components from the bundle'
+    required: false
+    default: 'false'
+  
+  dereference:
+    description: 'Inline all $ref (creates one massive file, not recommended)'
+    required: false
+    default: 'false'
+
+outputs:
+  bundled-path:
+    description: 'Path to the bundled spec'
+    value: ${{ steps.bundle.outputs.bundled-path }}
+  
+  bundle-hash:
+    description: 'SHA256 hash of the bundled file'
+    value: ${{ steps.hash.outputs.hash }}
+  
+  has-changes:
+    description: 'Whether the bundled spec changed'
+    value: ${{ steps.check.outputs.has-changes }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install Redocly CLI
+      shell: bash
+      run: |
+        echo "📦 Installing Redocly CLI..."
+        npm install -g @redocly/cli
+        echo "✅ Redocly CLI installed"
+    
+    - name: Bundle OpenAPI spec
+      id: bundle
+      shell: bash
+      run: |
+        INPUT="${{ inputs.input-file }}"
+        OUTPUT="${{ inputs.output-file }}"
+        
+        if [ ! -f "$INPUT" ]; then
+          echo "❌ Input file not found: $INPUT"
+          exit 1
+        fi
+        
+        echo "🔧 Bundling OpenAPI spec:"
+        echo "   Input:  $INPUT"
+        echo "   Output: $OUTPUT"
+        
+        # Build command with optional flags
+        CMD="redocly bundle \"$INPUT\" --output \"$OUTPUT\""
+        
+        if [ "${{ inputs.remove-unused-components }}" = "true" ]; then
+          CMD="$CMD --remove-unused-components"
+          echo "   Option: Remove unused components"
+        fi
+        
+        if [ "${{ inputs.dereference }}" = "true" ]; then
+          CMD="$CMD --dereferenced"
+          echo "   Option: Dereference (inline all \$ref)"
+        fi
+        
+        # Execute bundling
+        if eval "$CMD"; then
+          echo "✅ Bundling complete"
+        else
+          echo "❌ Bundling failed"
+          exit 1
+        fi
+        
+        echo "bundled-path=$OUTPUT" >> $GITHUB_OUTPUT
+    
+    - name: Calculate hash
+      id: hash
+      shell: bash
+      run: |
+        HASH=$(sha256sum "${{ inputs.output-file }}" | cut -d' ' -f1)
+        echo "hash=$HASH" >> $GITHUB_OUTPUT
+        echo "📊 SHA256: $HASH"
+    
+    - name: Check for changes
+      id: check
+      shell: bash
+      run: |
+        if git diff --exit-code "${{ inputs.output-file }}" 2>/dev/null; then
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+          echo "ℹ️  No changes detected (bundle is up to date)"
+        else
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          echo "✅ Changes detected - bundle was updated"
+        fi

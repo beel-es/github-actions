@@ -1,0 +1,92 @@
+name: Sync from OpenAPI (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      spec-url:
+        description: 'URL to download OpenAPI spec'
+        type: string
+        required: true
+      
+      spec-hash:
+        description: 'Expected SHA256 hash (optional)'
+        type: string
+        required: false
+        default: ''
+      
+      output-file:
+        description: 'Output filename'
+        type: string
+        required: false
+        default: 'openapi.yaml'
+      
+      commit-message:
+        description: 'Custom commit message (optional)'
+        type: string
+        required: false
+        default: 'sync: update OpenAPI spec'
+      
+      skip-commit:
+        description: 'Skip committing changes (just download)'
+        type: boolean
+        required: false
+        default: false
+    
+    outputs:
+      has-changes:
+        description: 'Whether changes were detected'
+        value: ${{ jobs.sync.outputs.has-changes }}
+      
+      spec-hash:
+        description: 'Hash of the downloaded spec'
+        value: ${{ jobs.sync.outputs.spec-hash }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    outputs:
+      has-changes: ${{ steps.sync.outputs.has-changes }}
+      spec-hash: ${{ steps.sync.outputs.spec-hash }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Sync OpenAPI spec
+        id: sync
+        uses: beel-es/github-actions/openapi-sync@main
+        with:
+          spec-url: ${{ inputs.spec-url }}
+          spec-hash: ${{ inputs.spec-hash }}
+          output-file: ${{ inputs.output-file }}
+      
+      - name: Commit and push
+        if: steps.sync.outputs.has-changes == 'true' && inputs.skip-commit == false
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add "${{ inputs.output-file }}"
+          
+          # Commit message with hash
+          COMMIT_MSG="${{ inputs.commit-message }}"
+          COMMIT_MSG="$COMMIT_MSG
+
+Hash: ${{ steps.sync.outputs.spec-hash }}"
+          
+          git commit -m "$COMMIT_MSG"
+          git push
+      
+      - name: Summary
+        run: |
+          if [ "${{ steps.sync.outputs.has-changes }}" = "true" ]; then
+            echo "✅ OpenAPI spec updated successfully"
+            echo "📊 Hash: ${{ steps.sync.outputs.spec-hash }}"
+          else
+            echo "ℹ️  OpenAPI spec already up to date"
+          fi
