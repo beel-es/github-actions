@@ -80,12 +80,8 @@ jobs:
           
           git add "${{ inputs.output-file }}"
           
-          COMMIT_MSG="${{ inputs.commit-message }}"
-          COMMIT_MSG="$COMMIT_MSG
-
-Hash: ${{ steps.bundle.outputs.bundle-hash }}"
-          
-          git commit -m "$COMMIT_MSG"
+          git commit -m "${{ inputs.commit-message }}" \
+            -m "Hash: ${{ steps.bundle.outputs.bundle-hash }}"
           git push
       
       - name: Summary
