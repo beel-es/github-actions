@@ -83,15 +83,15 @@ runs:
           echo "   Ref:   $REF"
           echo "   Path:  $PATH"
           
-          # Use GitHub API to download (supports private repos)
-          API_URL="https://api.github.com/repos/$OWNER/$REPO/contents/$PATH?ref=$REF"
-          echo "   API URL: $API_URL"
+          # Use GitHub CLI (pre-installed on all runners)
+          echo "   Using gh CLI to download..."
           
-          if curl -fsSL \
-            -H "Authorization: token $GITHUB_TOKEN" \
+          export GH_TOKEN="$GITHUB_TOKEN"
+          
+          if gh api \
+            "/repos/$OWNER/$REPO/contents/$PATH?ref=$REF" \
             -H "Accept: application/vnd.github.v3.raw" \
-            -o "$OUTPUT" \
-            "$API_URL"; then
+            > "$OUTPUT"; then
             echo "✅ Download successful (GitHub API with auth)"
           else
             echo "❌ Failed to download spec via GitHub API"
@@ -102,9 +102,9 @@ runs:
             exit 1
           fi
         else
-          # Non-GitHub raw URL - use simple curl
+          # Non-GitHub raw URL - use wget (more reliable on runners)
           echo "Non-GitHub URL - downloading directly..."
-          if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
+          if wget -q -O "$OUTPUT" "$SPEC_URL"; then
             echo "✅ Download successful"
           else
             echo "❌ Failed to download spec from $SPEC_URL"
