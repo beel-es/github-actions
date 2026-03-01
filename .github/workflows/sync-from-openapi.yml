@@ -33,7 +33,7 @@ on:
         default: false
     
     secrets:
-      GITHUB_TOKEN:
+      GH_TOKEN:
         description: 'GitHub token for private repos (optional)'
         required: false
     
@@ -57,7 +57,7 @@ jobs:
       spec-hash: ${{ steps.sync.outputs.spec-hash }}
     
     env:
-      CUSTOM_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || github.token }}
+      CUSTOM_GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
     
     steps:
       - name: Checkout
