@@ -32,6 +32,11 @@ on:
         required: false
         default: false
     
+    secrets:
+      GITHUB_TOKEN:
+        description: 'GitHub token for private repos (optional)'
+        required: false
+    
     outputs:
       has-changes:
         description: 'Whether changes were detected'
@@ -51,15 +56,20 @@ jobs:
       has-changes: ${{ steps.sync.outputs.has-changes }}
       spec-hash: ${{ steps.sync.outputs.spec-hash }}
     
+    env:
+      CUSTOM_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || github.token }}
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ env.CUSTOM_GITHUB_TOKEN }}
       
       - name: Sync OpenAPI spec
         id: sync
         uses: beel-es/github-actions/openapi-sync@master
+        env:
+          GITHUB_TOKEN: ${{ env.CUSTOM_GITHUB_TOKEN }}
         with:
           spec-url: ${{ inputs.spec-url }}
           spec-hash: ${{ inputs.spec-hash }}
