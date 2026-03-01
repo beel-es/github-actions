@@ -50,11 +50,16 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
-        # Ensure curl is available (some minimal runners don't have it)
-        if ! command -v curl &> /dev/null; then
+        echo "🔍 Checking for curl..."
+        if command -v curl &> /dev/null; then
+          echo "✅ curl is already installed"
+        else
           echo "📦 Installing curl..."
-          sudo apt-get update -qq && sudo apt-get install -y -qq curl
+          sudo apt-get update -qq
+          sudo apt-get install -y curl
+          echo "✅ curl installed successfully"
         fi
+        curl --version
     
     - name: Download OpenAPI spec
       id: download
