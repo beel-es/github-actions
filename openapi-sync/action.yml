@@ -53,12 +53,17 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
-        # Ensure curl is available (install if needed)
-        if ! command -v curl &> /dev/null; then
-          echo "📦 Installing curl..."
-          sudo apt-get update -qq && sudo apt-get install -y -qq curl
-          echo "✅ curl installed"
+        # Ensure curl is available (always install to avoid -e issues)
+        echo "📦 Ensuring curl is available..."
+        sudo apt-get update -qq >/dev/null 2>&1 || true
+        sudo apt-get install -y -qq curl >/dev/null 2>&1 || true
+        
+        # Verify curl is now available
+        if ! curl --version > /dev/null 2>&1; then
+          echo "❌ Failed to install curl"
+          exit 1
         fi
+        echo "✅ curl is ready"
         
         # Continue with download
         SPEC_URL="${{ inputs.spec-url }}"
