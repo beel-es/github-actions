@@ -50,10 +50,16 @@ runs:
     - name: Download OpenAPI spec
       id: download
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         SPEC_URL="${{ inputs.spec-url }}"
         OUTPUT="${{ inputs.output-file }}"
-        GITHUB_TOKEN="${{ inputs.github-token || github.token }}"
+        
+        # Use provided token or fallback to default
+        if [ -z "$GITHUB_TOKEN" ]; then
+          GITHUB_TOKEN="${{ github.token }}"
+        fi
         
         echo "📥 Downloading OpenAPI spec from:"
         echo "   $SPEC_URL"
