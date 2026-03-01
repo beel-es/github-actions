@@ -65,53 +65,45 @@ runs:
         echo "   $SPEC_URL"
         echo "   → $OUTPUT"
         
-        # Check if it's a GitHub raw URL that might be private
-        if [[ "$SPEC_URL" =~ github\.com ]]; then
-          echo "🔍 Detected GitHub URL - attempting download with authentication..."
+        # Check if it's a GitHub raw URL
+        if [[ "$SPEC_URL" == *"raw.githubusercontent.com"* ]]; then
+          echo "🔍 Detected GitHub raw URL - using API with authentication..."
           
-          # Try with GitHub token (works for both public and private repos)
-          if [[ "$SPEC_URL" =~ raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/(.+) ]]; then
-            OWNER="${BASH_REMATCH[1]}"
-            REPO="${BASH_REMATCH[2]}"
-            REF="${BASH_REMATCH[3]}"
-            PATH="${BASH_REMATCH[4]}"
-            
-            echo "   Owner: $OWNER"
-            echo "   Repo:  $REPO"
-            echo "   Ref:   $REF"
-            echo "   Path:  $PATH"
-            
-            # Use GitHub API to download (supports private repos)
-            API_URL="https://api.github.com/repos/$OWNER/$REPO/contents/$PATH?ref=$REF"
-            
-            if curl -fsSL \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3.raw" \
-              -o "$OUTPUT" \
-              "$API_URL"; then
-              echo "✅ Download successful (GitHub API with auth)"
-            else
-              echo "⚠️  GitHub API download failed, trying raw URL without auth..."
-              # Fallback to raw URL (works if repo is public)
-              if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
-                echo "✅ Download successful (raw URL)"
-              else
-                echo "❌ Failed to download spec from $SPEC_URL"
-                echo "   Repo might be private - ensure GITHUB_TOKEN has access"
-                exit 1
-              fi
-            fi
+          # Extract parts from URL using string manipulation
+          # Format: https://raw.githubusercontent.com/OWNER/REPO/REF/PATH
+          URL_WITHOUT_PROTOCOL="${SPEC_URL#https://raw.githubusercontent.com/}"
+          
+          OWNER=$(echo "$URL_WITHOUT_PROTOCOL" | cut -d'/' -f1)
+          REPO=$(echo "$URL_WITHOUT_PROTOCOL" | cut -d'/' -f2)
+          REF=$(echo "$URL_WITHOUT_PROTOCOL" | cut -d'/' -f3)
+          PATH=$(echo "$URL_WITHOUT_PROTOCOL" | cut -d'/' -f4-)
+          
+          echo "   Owner: $OWNER"
+          echo "   Repo:  $REPO"
+          echo "   Ref:   $REF"
+          echo "   Path:  $PATH"
+          
+          # Use GitHub API to download (supports private repos)
+          API_URL="https://api.github.com/repos/$OWNER/$REPO/contents/$PATH?ref=$REF"
+          echo "   API URL: $API_URL"
+          
+          if curl -fsSL \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3.raw" \
+            -o "$OUTPUT" \
+            "$API_URL"; then
+            echo "✅ Download successful (GitHub API with auth)"
           else
-            # GitHub URL but not raw.githubusercontent.com format
-            if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
-              echo "✅ Download successful"
-            else
-              echo "❌ Failed to download spec from $SPEC_URL"
-              exit 1
-            fi
+            echo "❌ Failed to download spec via GitHub API"
+            echo "   This usually means:"
+            echo "   - The token doesn't have access to the repo"
+            echo "   - The file doesn't exist at that path/ref"
+            echo "   Token prefix: ${GITHUB_TOKEN:0:7}..."
+            exit 1
           fi
         else
-          # Non-GitHub URL - use simple curl
+          # Non-GitHub raw URL - use simple curl
+          echo "Non-GitHub URL - downloading directly..."
           if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
             echo "✅ Download successful"
           else
