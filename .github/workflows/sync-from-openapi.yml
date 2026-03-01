@@ -73,13 +73,8 @@ jobs:
           
           git add "${{ inputs.output-file }}"
           
-          # Commit message with hash
-          COMMIT_MSG="${{ inputs.commit-message }}"
-          COMMIT_MSG="$COMMIT_MSG
-
-Hash: ${{ steps.sync.outputs.spec-hash }}"
-          
-          git commit -m "$COMMIT_MSG"
+          git commit -m "${{ inputs.commit-message }}" \
+            -m "Hash: ${{ steps.sync.outputs.spec-hash }}"
           git push
       
       - name: Summary
