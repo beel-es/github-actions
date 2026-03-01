@@ -59,7 +59,7 @@ jobs:
       
       - name: Sync OpenAPI spec
         id: sync
-        uses: beel-es/github-actions/openapi-sync@main
+        uses: beel-es/github-actions/openapi-sync@master
         with:
           spec-url: ${{ inputs.spec-url }}
           spec-hash: ${{ inputs.spec-hash }}
