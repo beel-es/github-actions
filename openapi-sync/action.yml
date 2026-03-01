@@ -47,6 +47,15 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        # Ensure curl is available (some minimal runners don't have it)
+        if ! command -v curl &> /dev/null; then
+          echo "📦 Installing curl..."
+          sudo apt-get update -qq && sudo apt-get install -y -qq curl
+        fi
+    
     - name: Download OpenAPI spec
       id: download
       shell: bash
@@ -83,28 +92,28 @@ runs:
           echo "   Ref:   $REF"
           echo "   Path:  $PATH"
           
-          # Use GitHub CLI (pre-installed on all runners)
-          echo "   Using gh CLI to download..."
+          # Use GitHub API to download (supports private repos)
+          API_URL="https://api.github.com/repos/$OWNER/$REPO/contents/$PATH?ref=$REF"
+          echo "   API URL: $API_URL"
           
-          export GH_TOKEN="$GITHUB_TOKEN"
-          
-          if gh api \
-            "/repos/$OWNER/$REPO/contents/$PATH?ref=$REF" \
+          if curl -fsSL \
+            -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3.raw" \
-            > "$OUTPUT"; then
+            -o "$OUTPUT" \
+            "$API_URL"; then
             echo "✅ Download successful (GitHub API with auth)"
           else
             echo "❌ Failed to download spec via GitHub API"
             echo "   This usually means:"
             echo "   - The token doesn't have access to the repo"
             echo "   - The file doesn't exist at that path/ref"
-            echo "   Token prefix: ${GITHUB_TOKEN:0:7}..."
+            echo "   Verify the token has 'repo' scope and access to $OWNER/$REPO"
             exit 1
           fi
         else
-          # Non-GitHub raw URL - use wget (more reliable on runners)
+          # Non-GitHub raw URL - use curl
           echo "Non-GitHub URL - downloading directly..."
-          if wget -q -O "$OUTPUT" "$SPEC_URL"; then
+          if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
             echo "✅ Download successful"
           else
             echo "❌ Failed to download spec from $SPEC_URL"
