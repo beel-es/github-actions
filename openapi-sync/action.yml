@@ -25,6 +25,11 @@ inputs:
     description: 'Whether to verify the hash (requires spec-hash)'
     required: false
     default: 'true'
+  
+  github-token:
+    description: 'GitHub token for private repos (optional, defaults to github.token)'
+    required: false
+    default: ''
 
 outputs:
   spec-path:
@@ -45,11 +50,10 @@ runs:
     - name: Download OpenAPI spec
       id: download
       shell: bash
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
       run: |
         SPEC_URL="${{ inputs.spec-url }}"
         OUTPUT="${{ inputs.output-file }}"
+        GITHUB_TOKEN="${{ inputs.github-token || github.token }}"
         
         echo "📥 Downloading OpenAPI spec from:"
         echo "   $SPEC_URL"

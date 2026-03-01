@@ -68,12 +68,11 @@ jobs:
       - name: Sync OpenAPI spec
         id: sync
         uses: beel-es/github-actions/openapi-sync@master
-        env:
-          GITHUB_TOKEN: ${{ env.CUSTOM_GITHUB_TOKEN }}
         with:
           spec-url: ${{ inputs.spec-url }}
           spec-hash: ${{ inputs.spec-hash }}
           output-file: ${{ inputs.output-file }}
+          github-token: ${{ env.CUSTOM_GITHUB_TOKEN }}
       
       - name: Commit and push
         if: steps.sync.outputs.has-changes == 'true' && inputs.skip-commit == false
