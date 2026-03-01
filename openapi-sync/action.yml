@@ -45,6 +45,8 @@ runs:
     - name: Download OpenAPI spec
       id: download
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         SPEC_URL="${{ inputs.spec-url }}"
         OUTPUT="${{ inputs.output-file }}"
@@ -53,12 +55,59 @@ runs:
         echo "   $SPEC_URL"
         echo "   → $OUTPUT"
         
-        # Download with follow redirects
-        if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
-          echo "✅ Download successful"
+        # Check if it's a GitHub raw URL that might be private
+        if [[ "$SPEC_URL" =~ github\.com ]]; then
+          echo "🔍 Detected GitHub URL - attempting download with authentication..."
+          
+          # Try with GitHub token (works for both public and private repos)
+          if [[ "$SPEC_URL" =~ raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/(.+) ]]; then
+            OWNER="${BASH_REMATCH[1]}"
+            REPO="${BASH_REMATCH[2]}"
+            REF="${BASH_REMATCH[3]}"
+            PATH="${BASH_REMATCH[4]}"
+            
+            echo "   Owner: $OWNER"
+            echo "   Repo:  $REPO"
+            echo "   Ref:   $REF"
+            echo "   Path:  $PATH"
+            
+            # Use GitHub API to download (supports private repos)
+            API_URL="https://api.github.com/repos/$OWNER/$REPO/contents/$PATH?ref=$REF"
+            
+            if curl -fsSL \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3.raw" \
+              -o "$OUTPUT" \
+              "$API_URL"; then
+              echo "✅ Download successful (GitHub API with auth)"
+            else
+              echo "⚠️  GitHub API download failed, trying raw URL without auth..."
+              # Fallback to raw URL (works if repo is public)
+              if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
+                echo "✅ Download successful (raw URL)"
+              else
+                echo "❌ Failed to download spec from $SPEC_URL"
+                echo "   Repo might be private - ensure GITHUB_TOKEN has access"
+                exit 1
+              fi
+            fi
+          else
+            # GitHub URL but not raw.githubusercontent.com format
+            if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
+              echo "✅ Download successful"
+            else
+              echo "❌ Failed to download spec from $SPEC_URL"
+              exit 1
+            fi
+          fi
         else
-          echo "❌ Failed to download spec from $SPEC_URL"
-          exit 1
+          # Non-GitHub URL - use simple curl
+          if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
+            echo "✅ Download successful"
+          else
+            echo "❌ Failed to download spec from $SPEC_URL"
+            exit 1
+          fi
         fi
         
         # Verify it's valid YAML
