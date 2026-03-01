@@ -47,26 +47,20 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install dependencies
-      shell: bash
-      run: |
-        echo "🔍 Checking for curl..."
-        if command -v curl &> /dev/null; then
-          echo "✅ curl is already installed"
-        else
-          echo "📦 Installing curl..."
-          sudo apt-get update -qq
-          sudo apt-get install -y curl
-          echo "✅ curl installed successfully"
-        fi
-        curl --version
-    
     - name: Download OpenAPI spec
       id: download
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
+        # Ensure curl is available (install if needed)
+        if ! command -v curl &> /dev/null; then
+          echo "📦 Installing curl..."
+          sudo apt-get update -qq && sudo apt-get install -y -qq curl
+          echo "✅ curl installed"
+        fi
+        
+        # Continue with download
         SPEC_URL="${{ inputs.spec-url }}"
         OUTPUT="${{ inputs.output-file }}"
         
