@@ -58,12 +58,16 @@ runs:
         sudo apt-get update -qq >/dev/null 2>&1 || true
         sudo apt-get install -y -qq curl >/dev/null 2>&1 || true
         
-        # Verify curl is now available
-        if ! curl --version > /dev/null 2>&1; then
+        # Refresh hash table so bash finds curl
+        hash -r 2>/dev/null || true
+        
+        # Verify curl is now available and set full path
+        CURL_BIN=$(which curl 2>/dev/null || echo "/usr/bin/curl")
+        if ! "$CURL_BIN" --version > /dev/null 2>&1; then
           echo "❌ Failed to install curl"
           exit 1
         fi
-        echo "✅ curl is ready"
+        echo "✅ curl is ready at: $CURL_BIN"
         
         # Continue with download
         SPEC_URL="${{ inputs.spec-url }}"
@@ -100,7 +104,7 @@ runs:
           API_URL="https://api.github.com/repos/$OWNER/$REPO/contents/$PATH?ref=$REF"
           echo "   API URL: $API_URL"
           
-          if curl -fsSL \
+          if "$CURL_BIN" -fsSL \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3.raw" \
             -o "$OUTPUT" \
@@ -117,7 +121,7 @@ runs:
         else
           # Non-GitHub raw URL - use curl
           echo "Non-GitHub URL - downloading directly..."
-          if curl -fsSL -o "$OUTPUT" "$SPEC_URL"; then
+          if "$CURL_BIN" -fsSL -o "$OUTPUT" "$SPEC_URL"; then
             echo "✅ Download successful"
           else
             echo "❌ Failed to download spec from $SPEC_URL"
